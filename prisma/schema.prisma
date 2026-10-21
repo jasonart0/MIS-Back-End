@@ -1,0 +1,242 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Lead {
+  id                 String           @id @default(uuid()) @db.Uuid
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String?
+  companyName        String?
+  position           String?
+  source             String?
+  ownerId            String?          @db.Uuid
+  status             String           @default("NEW")
+  approvalStatus     String           @default("PENDING")
+  conversionStatus   String           @default("PENDING")
+  score              Int?
+  estimatedDealValue Decimal?         @db.Decimal(12, 2)
+  notes              String?
+  createdById        String?          @db.Uuid
+  updatedById        String?          @db.Uuid
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  activities         LeadActivity[]
+  conversions        LeadConversion[]
+  originatedContact  SalesContact?    @relation("OriginatingLead")
+  tasks              SalesTaskLead[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model LeadActivity {
+  id            String   @id @default(uuid()) @db.Uuid
+  leadId        String   @db.Uuid
+  activityType  String
+  description   String
+  performedById String?  @db.Uuid
+  createdAt     DateTime @default(now())
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Restrict)
+
+  @@index([leadId, createdAt])
+}
+
+model LeadConversion {
+  id                 String        @id @default(uuid()) @db.Uuid
+  leadId             String        @db.Uuid
+  resultingContactId String?       @db.Uuid
+  conversionStatus   String
+  approvedById       String?       @db.Uuid
+  convertedById      String?       @db.Uuid
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  lead               Lead          @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  resultingContact   SalesContact? @relation("ConversionContact", fields: [resultingContactId], references: [id], onDelete: Restrict)
+
+  @@index([leadId, createdAt])
+  @@index([resultingContactId])
+}
+
+model SalesContact {
+  id                String             @id @default(uuid()) @db.Uuid
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  companyName       String?
+  position          String?
+  industry          String?
+  status            String             @default("ACTIVE")
+  accountManagerId  String?            @db.Uuid
+  satisfactionScore Int?
+  dealValue         Decimal?           @db.Decimal(12, 2)
+  originatingLeadId String?            @unique @db.Uuid
+  notes             String?
+  createdById       String?            @db.Uuid
+  updatedById       String?            @db.Uuid
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  originatingLead   Lead?              @relation("OriginatingLead", fields: [originatingLeadId], references: [id], onDelete: Restrict)
+  conversionRecords LeadConversion[]   @relation("ConversionContact")
+  activities        ContactActivity[]
+  tasks             SalesTaskContact[]
+
+  @@index([accountManagerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ContactActivity {
+  id            String       @id @default(uuid()) @db.Uuid
+  contactId     String       @db.Uuid
+  activityType  String
+  description   String
+  performedById String?      @db.Uuid
+  createdAt     DateTime     @default(now())
+  contact       SalesContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+
+  @@index([contactId, createdAt])
+}
+
+model SalesTask {
+  id           String              @id @default(uuid()) @db.Uuid
+  title        String
+  description  String?
+  status       String              @default("NEW")
+  priority     String              @default("MEDIUM")
+  assigneeId   String?             @db.Uuid
+  creatorId    String?             @db.Uuid
+  dueDate      DateTime?
+  progress     Int                 @default(0)
+  parentTaskId String?             @db.Uuid
+  completedAt  DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  parent       SalesTask?          @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: Restrict)
+  subtasks     SalesTask[]         @relation("TaskHierarchy")
+  checklist    TaskChecklistItem[]
+  comments     TaskComment[]
+  attachments  TaskAttachment[]
+  timeEntries  TaskTimeEntry[]
+  tags         SalesTaskTag[]
+  activities   TaskActivity[]
+  leads        SalesTaskLead[]
+  contacts     SalesTaskContact[]
+
+  @@index([assigneeId])
+  @@index([creatorId])
+  @@index([parentTaskId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model TaskChecklistItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  taskId      String    @db.Uuid
+  title       String
+  isCompleted Boolean   @default(false)
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  task        SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, position])
+}
+
+model TaskComment {
+  id        String    @id @default(uuid()) @db.Uuid
+  taskId    String    @db.Uuid
+  authorId  String?   @db.Uuid
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  task      SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+}
+
+model TaskAttachment {
+  id           String    @id @default(uuid()) @db.Uuid
+  taskId       String    @db.Uuid
+  fileName     String
+  mimeType     String
+  fileSize     Int
+  storageKey   String
+  uploadedById String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+  task         SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+}
+
+model TaskTimeEntry {
+  id              String    @id @default(uuid()) @db.Uuid
+  taskId          String    @db.Uuid
+  userId          String?   @db.Uuid
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMinutes Int?
+  description     String?
+  createdAt       DateTime  @default(now())
+  task            SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, startedAt])
+  @@index([userId])
+}
+
+model TaskTag {
+  id        String         @id @default(uuid()) @db.Uuid
+  name      String         @unique
+  createdAt DateTime       @default(now())
+  tasks     SalesTaskTag[]
+}
+
+model SalesTaskTag {
+  taskId String    @db.Uuid
+  tagId  String    @db.Uuid
+  task   SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  tag    TaskTag   @relation(fields: [tagId], references: [id], onDelete: Restrict)
+
+  @@id([taskId, tagId])
+  @@index([tagId])
+}
+
+model TaskActivity {
+  id            String    @id @default(uuid()) @db.Uuid
+  taskId        String    @db.Uuid
+  activityType  String
+  description   String
+  performedById String?   @db.Uuid
+  createdAt     DateTime  @default(now())
+  task          SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+}
+
+model SalesTaskLead {
+  taskId String    @db.Uuid
+  leadId String    @db.Uuid
+  task   SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  lead   Lead      @relation(fields: [leadId], references: [id], onDelete: Restrict)
+
+  @@id([taskId, leadId])
+  @@index([leadId])
+}
+
+model SalesTaskContact {
+  taskId    String       @db.Uuid
+  contactId String       @db.Uuid
+  task      SalesTask    @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  contact   SalesContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+
+  @@id([taskId, contactId])
+  @@index([contactId])
+}
