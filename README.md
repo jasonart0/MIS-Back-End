@@ -23,11 +23,14 @@ Before applying the initial migration, inspect the target database and its exist
 npm run db:validate
 npm run db:generate
 npm run db:migrate
+npm run db:seed
 npm run build
 npm run dev
 ```
 
 `db:migrate` runs checked-in migrations without resetting the database. For a reviewed development migration after changing the schema, use `npm run db:migrate:dev`; review the generated SQL before applying it. Never use database reset or force-reset commands on user data.
+
+`db:seed` adds clearly labeled sample leads, contacts, and tasks to a non-production database. It is safe to rerun and skips sample IDs that already exist. These records are not linked to one another, so they can be removed individually through the API.
 
 ## Security and identity limitations
 
