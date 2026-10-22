@@ -5,7 +5,6 @@ import { env } from "./config/env.js";
 import { asyncHandler, errorHandler, HttpError } from "./core/http/errors.js";
 import { prisma } from "./core/database/prisma.js";
 import { requireSalesAccess } from "./core/middleware/write-access.js";
-import { contactsRouter } from "./modules/growth-hub/sales/contacts/routes.js";
 import { leadsRouter } from "./modules/growth-hub/sales/leads/routes.js";
 import { tasksRouter } from "./modules/growth-hub/sales/tasks/routes.js";
 
@@ -41,7 +40,6 @@ app.get(
 const salesRouter = express.Router();
 salesRouter.use(requireSalesAccess);
 salesRouter.use("/leads", leadsRouter);
-salesRouter.use("/contacts", contactsRouter);
 salesRouter.use("/tasks", tasksRouter);
 app.use("/api/growth-hub/sales", salesRouter);
 

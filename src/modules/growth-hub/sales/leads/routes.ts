@@ -3,10 +3,8 @@ import { requireWriteAccess } from "../../../../core/middleware/write-access.js"
 import { asyncHandler } from "../../../../core/http/errors.js";
 import { validateBody, validateParams, validateQuery } from "../../../../core/http/validation.js";
 import {
-  convertLeadSchema,
   createLeadActivitySchema,
   createLeadSchema,
-  leadActionSchema,
   leadIdSchema,
   listLeadsSchema,
   updateLeadSchema,
@@ -47,23 +45,4 @@ leadsRouter.post(
   validateParams(leadIdSchema),
   validateBody(createLeadActivitySchema),
   asyncHandler(controller.createActivity),
-);
-leadsRouter.post(
-  "/:id/approve",
-  requireWriteAccess,
-  validateParams(leadIdSchema),
-  validateBody(leadActionSchema),
-  asyncHandler(controller.approve),
-);
-leadsRouter.post(
-  "/:id/convert",
-  requireWriteAccess,
-  validateParams(leadIdSchema),
-  validateBody(convertLeadSchema),
-  asyncHandler(controller.convert),
-);
-leadsRouter.get(
-  "/:id/conversions",
-  validateParams(leadIdSchema),
-  asyncHandler(controller.conversions),
 );

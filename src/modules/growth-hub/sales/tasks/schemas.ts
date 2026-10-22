@@ -13,12 +13,12 @@ export const listTasksSchema = paginationSchema.extend({
   status: z.string().trim().min(1).max(32).optional(),
   assigneeId: uuidSchema.optional(),
   leadId: uuidSchema.optional(),
-  contactId: uuidSchema.optional(),
 });
 
 const taskFieldsSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
+    leadId: uuidSchema,
     description: nullableText(5000),
     status: z.string().trim().min(1).max(32).optional(),
     priority: z.string().trim().min(1).max(32).optional(),
@@ -26,33 +26,24 @@ const taskFieldsSchema = z
     dueDate: dateTime.nullable().optional(),
     progress: z.number().int().min(0).max(100).optional(),
     parentTaskId: optionalId,
-    leadIds: z.array(uuidSchema).max(100).optional(),
-    contactIds: z.array(uuidSchema).max(100).optional(),
     tags: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
   })
   .strict();
 
-const taskRelationsAreUnique = (value: {
-  leadIds?: string[];
-  contactIds?: string[];
-  tags?: string[];
-}) =>
-  (value.leadIds === undefined || new Set(value.leadIds).size === value.leadIds.length) &&
-  (value.contactIds === undefined ||
-    new Set(value.contactIds).size === value.contactIds.length) &&
+const taskTagsAreUnique = (value: { tags?: string[] }) =>
   (value.tags === undefined ||
     new Set(value.tags.map((tag) => tag.toLocaleLowerCase("en-US"))).size === value.tags.length);
 
-export const createTaskSchema = taskFieldsSchema.refine(taskRelationsAreUnique, {
-  message: "Relationship IDs and tags must be unique.",
+export const createTaskSchema = taskFieldsSchema.refine(taskTagsAreUnique, {
+  message: "Task tags must be unique.",
 });
 export const createSubtaskSchema = taskFieldsSchema
-  .omit({ parentTaskId: true })
-  .refine(taskRelationsAreUnique, { message: "Relationship IDs and tags must be unique." });
+  .omit({ parentTaskId: true, leadId: true })
+  .refine(taskTagsAreUnique, { message: "Task tags must be unique." });
 export const updateTaskSchema = taskFieldsSchema
   .partial()
   .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.")
-  .refine(taskRelationsAreUnique, { message: "Relationship IDs and tags must be unique." });
+  .refine(taskTagsAreUnique, { message: "Task tags must be unique." });
 
 export const checklistCreateSchema = z
   .object({
@@ -115,19 +106,6 @@ export const timeEntryUpdateSchema = z
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
-
-export const relationshipUpdateSchema = z
-  .object({
-    leadIds: z.array(uuidSchema).max(100),
-    contactIds: z.array(uuidSchema).max(100),
-  })
-  .strict()
-  .refine(
-    (value) =>
-      new Set(value.leadIds).size === value.leadIds.length &&
-      new Set(value.contactIds).size === value.contactIds.length,
-    "Relationship IDs must be unique.",
-  );
 
 export const taskTagsSchema = z
   .object({ tags: z.array(z.string().trim().min(1).max(64)).max(50) })

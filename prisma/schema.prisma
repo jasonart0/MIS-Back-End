@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
 }
@@ -13,23 +12,24 @@ model Lead {
   email              String?
   phone              String?
   companyName        String?
+  industry           String?
   position           String?
   source             String?
   ownerId            String?          @db.Uuid
   status             String           @default("NEW")
-  approvalStatus     String           @default("PENDING")
-  conversionStatus   String           @default("PENDING")
   score              Int?
+  winProbability     Int              @default(0)
   estimatedDealValue Decimal?         @db.Decimal(12, 2)
+  nextAction         String?
+  lastContactAt      DateTime?
+  tags               String[]         @default([])
   notes              String?
   createdById        String?          @db.Uuid
   updatedById        String?          @db.Uuid
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   activities         LeadActivity[]
-  conversions        LeadConversion[]
-  originatedContact  SalesContact?    @relation("OriginatingLead")
-  tasks              SalesTaskLead[]
+  tasks              SalesTask[]
 
   @@index([ownerId])
   @@index([status])
@@ -48,66 +48,9 @@ model LeadActivity {
   @@index([leadId, createdAt])
 }
 
-model LeadConversion {
-  id                 String        @id @default(uuid()) @db.Uuid
-  leadId             String        @db.Uuid
-  resultingContactId String?       @db.Uuid
-  conversionStatus   String
-  approvedById       String?       @db.Uuid
-  convertedById      String?       @db.Uuid
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  lead               Lead          @relation(fields: [leadId], references: [id], onDelete: Restrict)
-  resultingContact   SalesContact? @relation("ConversionContact", fields: [resultingContactId], references: [id], onDelete: Restrict)
-
-  @@index([leadId, createdAt])
-  @@index([resultingContactId])
-}
-
-model SalesContact {
-  id                String             @id @default(uuid()) @db.Uuid
-  firstName         String
-  lastName          String
-  email             String?
-  phone             String?
-  companyName       String?
-  position          String?
-  industry          String?
-  status            String             @default("ACTIVE")
-  accountManagerId  String?            @db.Uuid
-  satisfactionScore Int?
-  dealValue         Decimal?           @db.Decimal(12, 2)
-  originatingLeadId String?            @unique @db.Uuid
-  notes             String?
-  createdById       String?            @db.Uuid
-  updatedById       String?            @db.Uuid
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  originatingLead   Lead?              @relation("OriginatingLead", fields: [originatingLeadId], references: [id], onDelete: Restrict)
-  conversionRecords LeadConversion[]   @relation("ConversionContact")
-  activities        ContactActivity[]
-  tasks             SalesTaskContact[]
-
-  @@index([accountManagerId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-model ContactActivity {
-  id            String       @id @default(uuid()) @db.Uuid
-  contactId     String       @db.Uuid
-  activityType  String
-  description   String
-  performedById String?      @db.Uuid
-  createdAt     DateTime     @default(now())
-  contact       SalesContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
-
-  @@index([contactId, createdAt])
-}
-
 model SalesTask {
   id           String              @id @default(uuid()) @db.Uuid
+  leadId       String              @db.Uuid
   title        String
   description  String?
   status       String              @default("NEW")
@@ -120,6 +63,7 @@ model SalesTask {
   completedAt  DateTime?
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
+  lead         Lead                @relation(fields: [leadId], references: [id], onDelete: Restrict)
   parent       SalesTask?          @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: Restrict)
   subtasks     SalesTask[]         @relation("TaskHierarchy")
   checklist    TaskChecklistItem[]
@@ -128,9 +72,8 @@ model SalesTask {
   timeEntries  TaskTimeEntry[]
   tags         SalesTaskTag[]
   activities   TaskActivity[]
-  leads        SalesTaskLead[]
-  contacts     SalesTaskContact[]
 
+  @@index([leadId])
   @@index([assigneeId])
   @@index([creatorId])
   @@index([parentTaskId])
@@ -219,24 +162,4 @@ model TaskActivity {
   task          SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
 
   @@index([taskId, createdAt])
-}
-
-model SalesTaskLead {
-  taskId String    @db.Uuid
-  leadId String    @db.Uuid
-  task   SalesTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  lead   Lead      @relation(fields: [leadId], references: [id], onDelete: Restrict)
-
-  @@id([taskId, leadId])
-  @@index([leadId])
-}
-
-model SalesTaskContact {
-  taskId    String       @db.Uuid
-  contactId String       @db.Uuid
-  task      SalesTask    @relation(fields: [taskId], references: [id], onDelete: Restrict)
-  contact   SalesContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
-
-  @@id([taskId, contactId])
-  @@index([contactId])
 }
