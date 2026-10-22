@@ -13,7 +13,6 @@ import {
   createSubtaskSchema,
   createTaskSchema,
   listTasksSchema,
-  relationshipUpdateSchema,
   taskIdSchema,
   taskItemIdSchema,
   taskTagsSchema,
@@ -136,10 +135,4 @@ tasksRouter.put(
   validateParams(taskIdSchema),
   validateBody(taskTagsSchema),
   asyncHandler(controller.replaceTags),
-);
-tasksRouter.put(
-  "/:id/relationships",
-  validateParams(taskIdSchema),
-  validateBody(relationshipUpdateSchema),
-  asyncHandler(controller.replaceRelationships),
 );

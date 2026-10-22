@@ -4,6 +4,7 @@ import { HttpError } from "../../../../core/http/errors.js";
 
 const taskSelect = {
   id: true,
+  leadId: true,
   title: true,
   description: true,
   status: true,
@@ -25,23 +26,9 @@ async function requireTask(transaction: Transaction, id: string) {
   if (!task) throw new HttpError(404, "not_found", "Task was not found.");
 }
 
-async function ensureIdsExist(
-  transaction: Transaction,
-  ids: string[],
-  entity: "lead" | "contact",
-) {
-  const uniqueIds = [...new Set(ids)];
-  if (uniqueIds.length !== ids.length) {
-    throw new HttpError(400, "duplicate_relationship", "Relationship IDs must be unique.");
-  }
-  if (uniqueIds.length === 0) return;
-  const found =
-    entity === "lead"
-      ? await transaction.lead.count({ where: { id: { in: uniqueIds } } })
-      : await transaction.salesContact.count({ where: { id: { in: uniqueIds } } });
-  if (found !== uniqueIds.length) {
-    throw new HttpError(404, "related_record_not_found", `One or more ${entity} IDs were not found.`);
-  }
+async function requireLead(transaction: Transaction, leadId: string) {
+  const lead = await transaction.lead.findUnique({ where: { id: leadId }, select: { id: true } });
+  if (!lead) throw new HttpError(404, "lead_not_found", "Lead was not found.");
 }
 
 async function ensureParentIsSafe(transaction: Transaction, taskId: string | undefined, parentId: string | null) {
@@ -90,21 +77,18 @@ export async function listTasks(input: {
   status?: string;
   assigneeId?: string;
   leadId?: string;
-  contactId?: string;
 }) {
   const where: Prisma.SalesTaskWhereInput = {
     ...(input.status ? { status: input.status } : {}),
     ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
-    ...(input.leadId ? { leads: { some: { leadId: input.leadId } } } : {}),
-    ...(input.contactId ? { contacts: { some: { contactId: input.contactId } } } : {}),
+    ...(input.leadId ? { leadId: input.leadId } : {}),
   };
   const [data, total] = await prisma.$transaction([
     prisma.salesTask.findMany({
       where,
       select: {
         ...taskSelect,
-        leads: { select: { leadId: true } },
-        contacts: { select: { contactId: true } },
+        lead: { select: { id: true, firstName: true, lastName: true } },
         tags: { include: { tag: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -128,8 +112,7 @@ export async function getTask(id: string) {
       timeEntries: { orderBy: { startedAt: "desc" } },
       tags: { include: { tag: true } },
       activities: { orderBy: { createdAt: "desc" } },
-      leads: { include: { lead: true } },
-      contacts: { include: { contact: true } },
+      lead: true,
     },
   });
   if (!task) throw new HttpError(404, "not_found", "Task was not found.");
@@ -138,6 +121,7 @@ export async function getTask(id: string) {
 
 export async function createTask(input: {
   title: string;
+  leadId: string;
   description?: string | null;
   status?: string;
   priority?: string;
@@ -145,19 +129,17 @@ export async function createTask(input: {
   dueDate?: string | null;
   progress?: number;
   parentTaskId?: string | null;
-  leadIds?: string[];
-  contactIds?: string[];
   tags?: string[];
 }) {
   return prisma.$transaction(
     async (transaction) => {
       await ensureParentIsSafe(transaction, undefined, input.parentTaskId ?? null);
-      await ensureIdsExist(transaction, input.leadIds ?? [], "lead");
-      await ensureIdsExist(transaction, input.contactIds ?? [], "contact");
+      await requireLead(transaction, input.leadId);
       const tags = await ensureTags(transaction, input.tags ?? []);
       const task = await transaction.salesTask.create({
         data: {
           title: input.title,
+          leadId: input.leadId,
           description: input.description,
           status: input.status,
           priority: input.priority,
@@ -167,16 +149,6 @@ export async function createTask(input: {
           parentTaskId: input.parentTaskId,
         },
       });
-      if (input.leadIds?.length) {
-        await transaction.salesTaskLead.createMany({
-          data: input.leadIds.map((leadId) => ({ taskId: task.id, leadId })),
-        });
-      }
-      if (input.contactIds?.length) {
-        await transaction.salesTaskContact.createMany({
-          data: input.contactIds.map((contactId) => ({ taskId: task.id, contactId })),
-        });
-      }
       if (tags.length) {
         await transaction.salesTaskTag.createMany({
           data: tags.map((tag) => ({ taskId: task.id, tagId: tag.id })),
@@ -187,8 +159,7 @@ export async function createTask(input: {
         where: { id: task.id },
         select: {
           ...taskSelect,
-          leads: { select: { leadId: true } },
-          contacts: { select: { contactId: true } },
+          lead: { select: { id: true, firstName: true, lastName: true } },
           tags: { include: { tag: true } },
         },
       });
@@ -201,6 +172,7 @@ export async function updateTask(
   id: string,
   input: {
     title?: string;
+    leadId?: string;
     description?: string | null;
     status?: string;
     priority?: string;
@@ -208,8 +180,6 @@ export async function updateTask(
     dueDate?: string | null;
     progress?: number;
     parentTaskId?: string | null;
-    leadIds?: string[];
-    contactIds?: string[];
     tags?: string[];
   },
 ) {
@@ -223,12 +193,9 @@ export async function updateTask(
       if (input.parentTaskId !== undefined) {
         await ensureParentIsSafe(transaction, id, input.parentTaskId);
       }
-      if (input.leadIds !== undefined) await ensureIdsExist(transaction, input.leadIds, "lead");
-      if (input.contactIds !== undefined) {
-        await ensureIdsExist(transaction, input.contactIds, "contact");
-      }
+      if (input.leadId !== undefined) await requireLead(transaction, input.leadId);
 
-      const { leadIds, contactIds, tags: inputTags, ...fields } = input;
+      const { tags: inputTags, ...fields } = input;
       const data: Prisma.SalesTaskUncheckedUpdateInput = {
         ...fields,
         ...(fields.dueDate !== undefined
@@ -247,22 +214,6 @@ export async function updateTask(
       };
       await transaction.salesTask.update({ where: { id }, data });
 
-      if (leadIds !== undefined) {
-        await transaction.salesTaskLead.deleteMany({ where: { taskId: id } });
-        if (leadIds.length) {
-          await transaction.salesTaskLead.createMany({
-            data: leadIds.map((leadId) => ({ taskId: id, leadId })),
-          });
-        }
-      }
-      if (contactIds !== undefined) {
-        await transaction.salesTaskContact.deleteMany({ where: { taskId: id } });
-        if (contactIds.length) {
-          await transaction.salesTaskContact.createMany({
-            data: contactIds.map((contactId) => ({ taskId: id, contactId })),
-          });
-        }
-      }
       if (inputTags !== undefined) {
         const tags = await ensureTags(transaction, inputTags);
         await transaction.salesTaskTag.deleteMany({ where: { taskId: id } });
@@ -284,8 +235,7 @@ export async function updateTask(
         where: { id },
         select: {
           ...taskSelect,
-          leads: { select: { leadId: true } },
-          contacts: { select: { contactId: true } },
+          lead: { select: { id: true, firstName: true, lastName: true } },
           tags: { include: { tag: true } },
         },
       });
@@ -308,8 +258,6 @@ export async function deleteTask(id: string) {
           timeEntries: true,
           tags: true,
           activities: true,
-          leads: true,
-          contacts: true,
         },
       },
     },
@@ -336,9 +284,14 @@ export async function listSubtasks(id: string) {
 
 export async function createSubtask(
   parentId: string,
-  input: Omit<Parameters<typeof createTask>[0], "parentTaskId">,
+  input: Omit<Parameters<typeof createTask>[0], "parentTaskId" | "leadId">,
 ) {
-  return createTask({ ...input, parentTaskId: parentId });
+  const parent = await prisma.salesTask.findUnique({
+    where: { id: parentId },
+    select: { leadId: true },
+  });
+  if (!parent) throw new HttpError(404, "not_found", "Parent task was not found.");
+  return createTask({ ...input, leadId: parent.leadId, parentTaskId: parentId });
 }
 
 export async function listChecklist(id: string) {
@@ -523,37 +476,6 @@ export async function replaceTags(taskId: string, names: string[]) {
       });
     }
     return tags;
-  });
-}
-
-export async function replaceRelationships(
-  taskId: string,
-  leadIds: string[],
-  contactIds: string[],
-) {
-  return prisma.$transaction(async (transaction) => {
-    await requireTask(transaction, taskId);
-    await ensureIdsExist(transaction, leadIds, "lead");
-    await ensureIdsExist(transaction, contactIds, "contact");
-    await transaction.salesTaskLead.deleteMany({ where: { taskId } });
-    await transaction.salesTaskContact.deleteMany({ where: { taskId } });
-    if (leadIds.length) {
-      await transaction.salesTaskLead.createMany({
-        data: leadIds.map((leadId) => ({ taskId, leadId })),
-      });
-    }
-    if (contactIds.length) {
-      await transaction.salesTaskContact.createMany({
-        data: contactIds.map((contactId) => ({ taskId, contactId })),
-      });
-    }
-    await transaction.taskActivity.create({
-      data: { taskId, activityType: "RELATIONSHIPS_UPDATED", description: "Task relationships updated." },
-    });
-    return {
-      leads: await transaction.salesTaskLead.findMany({ where: { taskId } }),
-      contacts: await transaction.salesTaskContact.findMany({ where: { taskId } }),
-    };
   });
 }
 
