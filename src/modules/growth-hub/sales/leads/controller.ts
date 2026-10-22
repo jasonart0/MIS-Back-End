@@ -16,7 +16,6 @@ export const list: RequestHandler = async (request, response) => {
     pagination: paginationResponse(query.page, query.pageSize, result.total),
   });
 };
-
 export const get: RequestHandler = async (request, response) => {
   response.json(await service.getLead(routeParam(request, "id")));
 };
@@ -42,16 +41,4 @@ export const createActivity: RequestHandler = async (request, response) => {
   response.status(201).json(
     await service.createLeadActivity(routeParam(request, "id"), request.body),
   );
-};
-
-export const approve: RequestHandler = async (request, response) => {
-  response.json(await service.approveLead(routeParam(request, "id"), request.body.notes));
-};
-
-export const convert: RequestHandler = async (request, response) => {
-  response.json(await service.convertLead(routeParam(request, "id"), request.body));
-};
-
-export const conversions: RequestHandler = async (request, response) => {
-  response.json(await service.listLeadConversions(routeParam(request, "id")));
 };

@@ -10,7 +10,6 @@ export const list: RequestHandler = async (request, response) => {
     status?: string;
     assigneeId?: string;
     leadId?: string;
-    contactId?: string;
   }>(response);
   const result = await service.listTasks(query);
   response.json({
@@ -150,16 +149,6 @@ export const tags: RequestHandler = async (request, response) => {
 
 export const replaceTags: RequestHandler = async (request, response) => {
   response.json(await service.replaceTags(routeParam(request, "id"), request.body.tags));
-};
-
-export const replaceRelationships: RequestHandler = async (request, response) => {
-  response.json(
-    await service.replaceRelationships(
-      routeParam(request, "id"),
-      request.body.leadIds,
-      request.body.contactIds,
-    ),
-  );
 };
 
 export const activities: RequestHandler = async (request, response) => {
